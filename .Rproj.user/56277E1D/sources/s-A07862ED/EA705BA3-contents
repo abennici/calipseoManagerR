@@ -1,0 +1,25 @@
+Package: calipseoManagerR
+Type: Package
+Title: SQL Management Tools for Calipseo Model
+Version: 0.1.0
+Author: 
+Authors@R: 
+    person(given = "Alexandre",
+           family = "Bennici",
+           email = "bennicialexandre@gmail.com",
+           role = c("aut", "cre"))
+Maintainer: The package maintainer <yourself@somewhere.net>
+Description: Provides R6 classes to manage SQL tables and data loading 
+    for the Calipseo data model. Includes automated table discovery, 
+    data entry, and SQL statement generation using DBI and pool.
+License: MIT
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.2.3
+Imports:
+    DBI,
+    R6,
+    pool,
+    dplyr,
+    data.table,
+    readr

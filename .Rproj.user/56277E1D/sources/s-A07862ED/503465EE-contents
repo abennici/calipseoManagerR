@@ -1,0 +1,7 @@
+#' @import DBI
+#' @import R6
+#' @import pool
+#' @import dplyr
+#' @import data.table
+#' @import readr
+NULL
