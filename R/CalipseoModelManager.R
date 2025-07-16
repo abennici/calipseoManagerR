@@ -24,13 +24,11 @@
 
 CalipseoModelManager <- R6::R6Class("CalipseoModelManager",
                                     private = list(
-                                      pool = NULL,
-                                      db_name = NULL
+                                      pool = NULL
                                     ),
                                     public = list(
-                                      initialize = function(pool, db_name) {
+                                      initialize = function(pool) {
                                         private$pool <- pool
-                                        private$db_name <- db_name
                                       },
 
                                       list_tables = function() {
@@ -38,7 +36,7 @@ CalipseoModelManager <- R6::R6Class("CalipseoModelManager",
                                       },
 
                                       load_table = function(table_name) {
-                                        CalipseoTable$new(pool = private$pool, db_name = private$db_name, table_name = table_name)
+                                        CalipseoTable$new(pool = private$pool, table_name = table_name)
                                       }
                                     )
 )
