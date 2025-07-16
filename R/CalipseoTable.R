@@ -101,7 +101,7 @@ CalipseoTable <- R6Class("CalipseoTable",
                            },
 
                            VIEW_DB_TABLE = function() {
-                             dbGetQuery(self$con, sprintf("SELECT * FROM `%s`", self$name))
+                             dbGetQuery(self$pool, sprintf("SELECT * FROM `%s`", self$name))
                            },
 
                            FOREIGN_KEYS = function() {
@@ -113,7 +113,7 @@ CalipseoTable <- R6Class("CalipseoTable",
                                return(nrow(self$entries))
                              }
                              sql <- sprintf("SELECT MAX(`%s`) AS max_val FROM `%s`", self$index_field, self$name)
-                             max_db <- dbGetQuery(self$con, sql)$max_val
+                             max_db <- dbGetQuery(self$pool, sql)$max_val
                              max_db <- ifelse(is.na(max_db), 0, max_db)
                              return(max_db + nrow(self$entries))
                            },
@@ -139,7 +139,7 @@ CalipseoTable <- R6Class("CalipseoTable",
                              sql <- paste0(sql_note, sql_insert, sql_body, ";\n\n")
 
                              if (execute) {
-                               dbExecute(self$con, sql)
+                               dbExecute(self$pool, sql)
                                self$CLEAR_ENTRIES()
                              }
 
@@ -160,7 +160,7 @@ CalipseoTable <- R6Class("CalipseoTable",
                                statements <- unlist(strsplit(sql, ";"))
                                statements <- statements[nzchar(statements)]
                                for (stmt in statements) {
-                                 dbExecute(self$con, paste0(stmt, ";"))
+                                 dbExecute(self$pool, paste0(stmt, ";"))
                                }
                              }
 
