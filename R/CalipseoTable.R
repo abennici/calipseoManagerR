@@ -28,7 +28,7 @@
 
 CalipseoTable <- R6Class("CalipseoTable",
                          public = list(
-                           con = NULL,
+                           pool = NULL,
                            name = NULL,
                            structure = NULL,
                            dataset = NULL,
@@ -36,10 +36,10 @@ CalipseoTable <- R6Class("CalipseoTable",
                            foreign_keys = NULL,
                            index_field = NULL,
 
-                           initialize = function(con, table_name) {
-                             self$con <- con
+                           initialize = function(pool, table_name) {
+                             self$pool <- pool
                              self$name <- table_name
-                             self$structure <- dbGetQuery(con, sprintf("DESCRIBE `%s`", table_name))
+                             self$structure <- dbGetQuery(pool, sprintf("DESCRIBE `%s`", table_name))
                              self$dataset <- self$structure
                              self$entries <- data.table(1)[, (self$structure$Field) := NA][, V1 := NULL][.0]
 
@@ -56,7 +56,7 @@ CalipseoTable <- R6Class("CalipseoTable",
                                "AND RefCons.constraint_name = KeyCol.constraint_name ",
                                sprintf("WHERE RefCons.constraint_schema = DATABASE() AND RefCons.Table_name = '%s';", table_name)
                              )
-                             self$foreign_keys <- dbGetQuery(con, fk_query)
+                             self$foreign_keys <- dbGetQuery(pool, fk_query)
 
                              idx <- self$structure$Field[self$structure$Extra == "auto_increment"]
                              self$index_field <- ifelse(length(idx) == 0, NA, idx)
