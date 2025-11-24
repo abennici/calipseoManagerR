@@ -27,6 +27,45 @@
 #' @export
 
 CalipseoTable <- R6Class("CalipseoTable",
+                         private = list(
+
+                           # --- Mapping SQL → Type R ---
+                           map_sql_type_to_r = function(sql_type) {
+                             sql <- tolower(sql_type)
+
+                             if (grepl("int", sql)) {
+                               return(integer())
+                             }
+
+                             if (grepl("timestamp|datetime", sql)) {
+                               return(as.POSIXct(character()))
+                             }
+
+                             if (grepl("^date$", sql)) {
+                               return(as.Date(character()))
+                             }
+
+                             if (grepl("float|double|decimal|numeric", sql)) {
+                               return(numeric())
+                             }
+
+                             if (grepl("char|text", sql)) {
+                               return(character())
+                             }
+
+                             # fallback type
+                             return(character())
+                           },
+                           make_typed_na = function(col) {
+                             if (inherits(col, "POSIXct")) return(as.POSIXct(NA))
+                             if (inherits(col, "Date")) return(as.Date(NA))
+                             if (is.integer(col)) return(NA_integer_)
+                             if (is.numeric(col)) return(NA_real_)
+                             if (is.character(col)) return(NA_character_)
+                             return(NA)   # fallback
+                           }
+
+                         ),
                          public = list(
                            pool = NULL,
                            name = NULL,
@@ -41,7 +80,10 @@ CalipseoTable <- R6Class("CalipseoTable",
                              self$name <- table_name
                              self$structure <- dbGetQuery(pool, sprintf("DESCRIBE `%s`", table_name))
                              self$dataset <- self$structure
-                             self$entries <- data.table(1)[, (self$structure$Field) := NA][, V1 := NULL][.0]
+                             self$entries <- as.data.table(
+                               lapply(self$structure$Type, private$map_sql_type_to_r)
+                             )
+                             setnames(self$entries, self$structure$Field)
 
                              fk_query <- paste0(
                                "SELECT RefCons.constraint_name as 'name', RefCons.constraint_schema as 'schema', ",
@@ -62,14 +104,56 @@ CalipseoTable <- R6Class("CalipseoTable",
                              self$index_field <- ifelse(length(idx) == 0, NA, idx)
                            },
 
+
                            ADD_ENTRY = function(...) {
+
                              args <- list(...)
-                             row <- as.list(rep(NA, nrow(self$structure)))
+
+                             row <- lapply(self$structure$Type, private$map_sql_type_to_r)
                              names(row) <- self$structure$Field
+                             row <- lapply(row, private$make_typed_na)
+                             row <- as.data.table(row)
+
+                             for (colname in names(row)) {
+
+                                default_val <- self$structure[self$structure$Field == colname, "Default"]
+                                if (length(default_val) == 0 || is.na(default_val) || default_val == "") {
+                                  next
+                                }
+
+                                if (default_val == "CURRENT_TIMESTAMP") {
+                                  default_val <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+                                }
+
+                                 cell_type <- class(row[[colname]])[1]
+
+                                 row[[colname]] <- switch(cell_type,
+                                                          integer   = as.integer(default_val),
+                                                          numeric   = as.numeric(default_val),
+                                                          POSIXct   = as.POSIXct(default_val),
+                                                          Date      = as.Date(default_val),
+                                                          character = as.character(default_val),
+                                                          # fallback
+                                                          default_val
+                                 )
+                             }
 
                              for (colname in names(args)) {
                                if (colname %in% names(row)) {
-                                 row[[colname]] <- args[[colname]]
+                                 val <- args[[colname]]
+                                 if (is.null(val) || is.na(val)){next}
+
+                                 cell_type <- class(row[[colname]])[1]
+
+                                 row[[colname]] <- switch(cell_type,
+                                                          integer   = as.integer(val),
+                                                          numeric   = as.numeric(val),
+                                                          POSIXct   = as.POSIXct(val),
+                                                          Date      = as.Date(val),
+                                                          character = as.character(val),
+                                                          # fallback
+                                                          val
+                                 )
                                }
                              }
 
@@ -77,7 +161,17 @@ CalipseoTable <- R6Class("CalipseoTable",
                                row[[self$index_field]] <- self$MAX_INDEX() + 1
                              }
 
-                             self$entries <- rbindlist(list(self$entries, as.data.table(row)), fill = TRUE)
+                             new_dt <- as.data.table(row)
+
+                             print(new_dt)
+
+                             if (nrow(self$entries) == 0) {
+                               self$entries <- as.data.table(new_dt)
+                             } else {
+                               self$entries <- rbindlist(list(self$entries, as.data.table(new_dt)), fill = TRUE)
+                             }
+
+
                            },
 
                            REMOVE_ENTRY = function(row_to_remove) {
@@ -144,7 +238,7 @@ CalipseoTable <- R6Class("CalipseoTable",
                              }
 
                              if (!is.null(file)) {
-                               writeLines(sql, file)
+                               sql<-paste0(file,sql)
                              }
 
                              return(sql)
