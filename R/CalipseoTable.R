@@ -63,6 +63,19 @@ CalipseoTable <- R6Class("CalipseoTable",
                              if (is.numeric(col)) return(NA_real_)
                              if (is.character(col)) return(NA_character_)
                              return(NA)   # fallback
+                           },
+                           # datetime local -> datetime DB
+                           to_db_tz = function(x) {
+                             if (!inherits(x, "POSIXct")) return(x)
+                             x<-force_tz(x, tzone = self$tz_local)
+                             x<-with_tz(x,self$tz_db)
+                           },
+
+                           # datetime DB -> datetime local
+                           from_db_tz = function(x) {
+                             if (!inherits(x, "POSIXct")) return(x)
+                             x<-force_tz(x, tzone = self$tz_db)
+                             x<-with_tz(x,self$tz_local)
                            }
 
                          ),
@@ -74,10 +87,14 @@ CalipseoTable <- R6Class("CalipseoTable",
                            entries = NULL,
                            foreign_keys = NULL,
                            index_field = NULL,
+                           tz_db = "UTC",
+                           tz_local = Sys.timezone(),
 
-                           initialize = function(pool, table_name) {
+                           initialize = function(pool, table_name, tz_db = "UTC", tz_local = Sys.timezone()) {
                              self$pool <- pool
                              self$name <- table_name
+                             self$tz_db <- tz_db
+                             self$tz_local <- tz_local
                              self$structure <- dbGetQuery(pool, sprintf("DESCRIBE `%s`", table_name))
                              self$dataset <- self$structure
                              self$entries <- as.data.table(
@@ -122,7 +139,7 @@ CalipseoTable <- R6Class("CalipseoTable",
                                 }
 
                                 if (default_val == "CURRENT_TIMESTAMP") {
-                                  default_val <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+                                  default_val <- as.POSIXct(Sys.time(), tz = "UTC")
                                 }
 
                                  cell_type <- class(row[[colname]])[1]
@@ -130,7 +147,7 @@ CalipseoTable <- R6Class("CalipseoTable",
                                  row[[colname]] <- switch(cell_type,
                                                           integer   = as.integer(default_val),
                                                           numeric   = as.numeric(default_val),
-                                                          POSIXct   = as.POSIXct(default_val),
+                                                          POSIXct   = default_val,
                                                           Date      = as.Date(default_val),
                                                           character = as.character(default_val),
                                                           # fallback
@@ -145,15 +162,19 @@ CalipseoTable <- R6Class("CalipseoTable",
 
                                  cell_type <- class(row[[colname]])[1]
 
-                                 row[[colname]] <- switch(cell_type,
-                                                          integer   = as.integer(val),
-                                                          numeric   = as.numeric(val),
-                                                          POSIXct   = as.POSIXct(val),
-                                                          Date      = as.Date(val),
-                                                          character = as.character(val),
-                                                          # fallback
-                                                          val
-                                 )
+                                 converted <- switch(cell_type,
+                                                     integer   = as.integer(val),
+                                                     numeric   = as.numeric(val),
+                                                     POSIXct   = as.POSIXct(val, tz = self$tz_local),
+                                                     Date      = as.Date(val),
+                                                     character = as.character(val),
+                                                     val)
+
+                                 if (inherits(converted, "POSIXct")) {
+                                   converted <- private$to_db_tz(converted)
+                                 }
+
+                                 row[[colname]] <- converted
                                }
                              }
 
@@ -194,8 +215,29 @@ CalipseoTable <- R6Class("CalipseoTable",
                              return(subset(self$dataset, Null == "NO")$Field)
                            },
 
-                           VIEW_DB_TABLE = function() {
-                             dbGetQuery(self$pool, sprintf("SELECT * FROM `%s`", self$name))
+                           VIEW_DB_TABLE = function(display = c("local", "db")) {
+                             display <- match.arg(display)
+
+                             df <- dbGetQuery(self$pool, sprintf("SELECT * FROM `%s`", self$name))
+
+                             if (display == "db") {
+                               return(df)
+                             }
+
+                             datetime_cols <- self$structure$Field[
+                               grepl("datetime|timestamp", tolower(self$structure$Type))
+                             ]
+
+                             if (length(datetime_cols) == 0) return(df)
+
+                             for (col in datetime_cols) {
+                               if (col %in% names(df)) {
+                                 df[[col]] <- as.POSIXct(df[[col]], tz = self$tz_db)
+                                 df[[col]] <- private$from_db_tz(df[[col]])
+                               }
+                             }
+
+                             return(df)
                            },
 
                            FOREIGN_KEYS = function() {

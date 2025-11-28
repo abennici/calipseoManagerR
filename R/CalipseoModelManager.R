@@ -16,6 +16,8 @@
 #' \dontrun{
 #' pool <- pool::dbPool(DBI::dbConnect(...))
 #' manager <- CalipseoModelManager$new(pool)
+#' manager$setLocalTimezone("Europe/Berlin")
+#' manager$setDBTimezone("UTC")
 #' manager$list_tables()
 #' table_obj <- manager$load_table("my_table")
 #' }
@@ -27,8 +29,23 @@ CalipseoModelManager <- R6::R6Class("CalipseoModelManager",
                                       pool = NULL
                                     ),
                                     public = list(
-                                      initialize = function(pool) {
+                                      tz_db = "UTC",
+                                      tz_local = Sys.timezone(),
+
+                                      initialize = function(pool, tz_db = "UTC", tz_local = Sys.timezone()) {
                                         private$pool <- pool
+                                        self$tz_db <- tz_db
+                                        self$tz_local <- tz_local
+                                      },
+
+                                      setDBTimezone = function(tz) {
+                                        self$tz_db <- tz
+                                        invisible(self)
+                                      },
+
+                                      setLocalTimezone = function(tz) {
+                                        self$tz_local <- tz
+                                        invisible(self)
                                       },
 
                                       list_tables = function() {
@@ -36,7 +53,7 @@ CalipseoModelManager <- R6::R6Class("CalipseoModelManager",
                                       },
 
                                       load_table = function(table_name) {
-                                        CalipseoTable$new(pool = private$pool, table_name = table_name)
+                                        CalipseoTable$new(pool = private$pool, table_name = table_name,tz_db = self$tz_db, tz_local = self$tz_local)
                                       }
                                     )
 )
